@@ -15,6 +15,9 @@
  */
 package org.springframework.ai.prompt;
 
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -24,6 +27,7 @@ import org.springframework.ai.chat.prompt.SystemPromptTemplate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.ai.template.TemplateTreeFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -41,10 +45,10 @@ class PromptTests {
 
 		// Try to render with missing value for template variable, expect exception
 		Assertions.assertThatThrownBy(() -> {
-			String promptString = pt.render(model);
-		})
-			.isInstanceOf(IllegalStateException.class)
-			.hasMessage("All template variables were not replaced. Missing variable names are [lastName]");
+					String promptString = pt.render(model);
+				})
+				.isInstanceOf(IllegalStateException.class)
+				.hasMessage("All template variables were not replaced. Missing variable names are [lastName]");
 
 		pt.add("lastName", "Park"); // TODO investigate partial
 		String promptString = pt.render(model);
@@ -83,7 +87,7 @@ class PromptTests {
 		Prompt systemPrompt = promptTemplate.create(systemModel);
 
 		promptTemplate = new PromptTemplate(humanTemplate); // creates a Prompt with
-															// HumanMessage
+		// HumanMessage
 		Prompt humanPrompt = promptTemplate.create(humanModel);
 
 		// ChatPromptTemplate chatPromptTemplate = new ChatPromptTemplate(systemPrompt,
@@ -128,6 +132,99 @@ class PromptTests {
 		Assertions.assertThatThrownBy(() -> {
 			new PromptTemplate(template);
 		}).isInstanceOf(IllegalArgumentException.class).hasMessage("The template string is not valid.");
+	}
+
+	@Test
+	void jsonTestTemplateString() {
+		String template = """
+				List all European countries and their capitals. Answer with the following JSON format:  {{"Country name": "capital name"}}
+				""";
+		String expected = """
+				List all European countries and their capitals. Answer with the following JSON format:  {"Country name": "capital name"}
+				""";
+		var map = new HashMap<String, Object>();
+		map.put("Country name", "incorrect name");
+		var tmp = TemplateTreeFactory.buildTreeFromString(template, map);
+		System.out.println(tmp);
+		assertThat(tmp.toString()).isEqualTo(expected);
+	}
+
+	@Test
+	void nestedJsonTestTemplateString() {
+		String template = """
+				this json is nested and using variable.
+				{{
+					'test' : { test }
+				}}
+				""";
+		String expected = """
+				this json is nested and using variable.
+				{
+					'test' : test Value
+				}
+				""";
+		var map = new HashMap<String, Object>();
+		map.put("test", "test Value");
+		var tmp = TemplateTreeFactory.buildTreeFromString(template, map);
+		System.out.println(tmp);
+		assertThat(tmp.toString()).isEqualTo(expected);
+	}
+
+	@Test
+	void moreNestedJsonTestTemplateString() {
+		String title = "Bracket Test";
+		String description = "nested json test";
+		Date date = new Date();
+		List<String> comments = Arrays.asList("test1", "test2", "test3");
+
+		String template = """
+				this is a more complex Json Format.
+				{{
+					'title' : { title },
+					'description' : { description },
+					'metadata' : {{
+						'createdAt' : { createdAt },
+						'comments' : { comments }
+					}}
+				}}
+				""";
+		String expected = """
+				this is a more complex Json Format.
+				{
+					'title' : %s,
+					'description' : %s,
+					'metadata' : {
+						'createdAt' : %s,
+						'comments' : %s
+					}
+				}
+				""".formatted(title, description, date, comments);
+
+		var map = new HashMap<String, Object>();
+
+		map.put("title", title);
+		map.put("description", description);
+		map.put("createdAt", date);
+		map.put("comments", comments);
+		var tmp = TemplateTreeFactory.buildTreeFromString(template, map);
+		System.out.println(tmp);
+		assertThat(tmp.toString()).isEqualTo(expected);
+	}
+
+	@Test
+	void doubleBracketTest() {
+		String template = """
+				this is double bracket test : {{ '{ key }' : '{ value }' }}
+				""";
+		String expected = """
+				this is double bracket test : { 'Key' : 'Value' }
+						""";
+		var map = new HashMap<String, Object>();
+		map.put("key", "Key");
+		map.put("value", "Value");
+		var tmp = TemplateTreeFactory.buildTreeFromString(template, map);
+		System.out.println(tmp);
+		assertThat(tmp.toString()).isEqualTo(expected);
 	}
 
 }
